@@ -1,0 +1,761 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #ffffff 0%, #fef2f2 50%, #ffffff 100%);
+    color: var(--truex-text);
+    height: 100vh;
+    overflow: hidden;
+}
+
+.chat-container {
+    display: flex;
+    height: 100vh;
+}
+
+/* TrueX Brand Colors - Red & White Theme */
+:root {
+    --truex-primary: #dc2626;
+    --truex-secondary: #991b1b;
+    --truex-accent: #ef4444;
+    --truex-light: #ffffff;
+    --truex-gray: #6b7280;
+    --truex-dark: #1f2937;
+    --truex-sidebar: #ffffff;
+    --truex-surface: #f9fafb;
+    --truex-card: #ffffff;
+    --truex-border: #e5e7eb;
+    --truex-hover: #fef2f2;
+    --truex-text: #111827;
+    --truex-subtle: #6b7280;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 260px;
+    background: var(--truex-sidebar);
+    border-right: 1px solid var(--truex-border);
+    display: flex;
+    flex-direction: column;
+    transition: margin-left 0.3s ease;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-header {
+    padding: 24px 20px;
+    border-bottom: 1px solid var(--truex-border);
+    background: var(--truex-surface);
+}
+
+.logo-section {
+    margin-bottom: 16px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--truex-primary);
+    border: 2px solid var(--truex-primary);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+}
+
+.logo svg {
+    color: #ffffff;
+}
+
+.logo-text {
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+}
+
+.new-chat-btn {
+    width: 100%;
+    padding: 14px 18px;
+    background: #ffffff;
+    border: 2px solid var(--truex-primary);
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--truex-primary);
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.new-chat-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(220, 38, 38, 0.2);
+    background: var(--truex-hover);
+    border-color: var(--truex-secondary);
+}
+
+.new-chat-btn svg {
+    color: var(--truex-primary);
+}
+
+.chat-history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.history-item {
+    padding: 14px 16px;
+    margin: 4px 0;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--truex-surface);
+    border: 1px solid var(--truex-border);
+    position: relative;
+}
+
+.history-item:hover {
+    background: var(--truex-hover);
+    border-color: var(--truex-primary);
+    transform: translateX(4px);
+}
+
+.history-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--truex-text);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-date {
+    font-size: 12px;
+    color: var(--truex-subtle);
+}
+
+/* Main Chat Area */
+.main-chat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--truex-light);
+}
+
+.chat-header {
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--truex-border);
+    background: var(--truex-surface);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.header-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--truex-primary);
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+}
+
+.header-subtitle {
+    font-size: 14px;
+    color: var(--truex-subtle);
+    font-weight: 500;
+}
+
+/* Messages Container */
+.messages-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.welcome-message {
+    text-align: center;
+    margin-top: 80px;
+    color: var(--truex-text);
+}
+
+.welcome-message h2 {
+    font-size: 36px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: var(--truex-primary);
+    letter-spacing: -1px;
+}
+
+.welcome-message p {
+    font-size: 18px;
+    color: var(--truex-subtle);
+    line-height: 1.7;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.message {
+    display: flex;
+    gap: 16px;
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+    animation: fadeInUp 0.3s ease;
+}
+
+.message.user {
+    flex-direction: row-reverse;
+}
+
+.message-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.message.assistant .message-avatar {
+    background: var(--truex-primary);
+    color: #ffffff;
+    border: 2px solid var(--truex-primary);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+}
+
+.message.user .message-avatar {
+    background: var(--truex-dark);
+    color: #ffffff;
+    border: 2px solid var(--truex-dark);
+    box-shadow: 0 4px 12px rgba(31, 41, 55, 0.25);
+}
+
+.message-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.message.assistant .message-content {
+    background: var(--truex-surface);
+    padding: 18px 20px;
+    border-radius: 12px;
+    border: 1px solid var(--truex-border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.message.user .message-content {
+    background: var(--truex-primary);
+    color: #ffffff;
+    padding: 18px 20px;
+    border-radius: 12px;
+    border: 1px solid var(--truex-primary);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+}
+
+.message-text {
+    font-size: 15px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: var(--truex-text);
+}
+
+.message.user .message-text {
+    color: #ffffff;
+}
+
+.message-time {
+    font-size: 12px;
+    color: var(--truex-subtle);
+    margin-top: 8px;
+    font-weight: 500;
+}
+
+.message.user .message-time {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Input Container */
+.input-container {
+    padding: 24px 32px 32px;
+    border-top: 1px solid var(--truex-border);
+    background: var(--truex-surface);
+}
+
+.input-wrapper {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    max-width: 900px;
+    margin: 0 auto;
+    background: var(--truex-light);
+    border: 2px solid var(--truex-border);
+    border-radius: 16px;
+    padding: 16px 20px;
+    transition: all 0.3s ease;
+}
+
+.input-wrapper:focus-within {
+    border-color: var(--truex-primary);
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.message-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    resize: none;
+    font-size: 15px;
+    line-height: 1.6;
+    font-family: inherit;
+    outline: none;
+    max-height: 140px;
+    overflow-y: auto;
+    color: var(--truex-text);
+}
+
+.message-input::placeholder {
+    color: var(--truex-subtle);
+}
+
+.send-button {
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: var(--truex-primary);
+    color: #ffffff;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+}
+
+.send-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(220, 38, 38, 0.35);
+    background: var(--truex-secondary);
+}
+
+.send-button:disabled {
+    background: var(--truex-hover);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.input-footer {
+    text-align: center;
+    margin-top: 12px;
+}
+
+.input-footer span {
+    font-size: 12px;
+    color: var(--truex-subtle);
+    font-weight: 500;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100vh;
+        z-index: 1000;
+        margin-left: -260px;
+    }
+
+    .sidebar.active {
+        margin-left: 0;
+    }
+
+    .main-chat {
+        width: 100%;
+    }
+
+    .messages-container {
+        padding: 16px;
+    }
+
+    .input-container {
+        padding: 12px 16px 16px;
+    }
+
+    .chat-header {
+        padding: 12px 16px;
+    }
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #999;
+}
+
+/* Loading animation */
+.typing-indicator {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.typing-indicator span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #666;
+    animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.typing-indicator span:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+@keyframes typing {
+    0%, 80%, 100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Context Menu Styles */
+.context-menu {
+    position: fixed;
+    background: var(--truex-light);
+    border: 1px solid var(--truex-border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    display: none;
+    min-width: 180px;
+    overflow: hidden;
+}
+
+.context-menu-item {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--truex-text);
+    transition: all 0.3s ease;
+}
+
+.context-menu-item:hover {
+    background: var(--truex-hover);
+    transform: translateX(4px);
+}
+
+.context-menu-item svg {
+    flex-shrink: 0;
+    color: var(--truex-subtle);
+}
+
+.context-menu-item#deleteItem {
+    color: var(--truex-accent);
+}
+
+.context-menu-item#deleteItem:hover {
+    background: #fef2f2;
+}
+
+/* Rename Dialog Styles */
+.rename-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1001;
+    backdrop-filter: blur(8px);
+}
+
+.rename-dialog.show {
+    display: flex;
+}
+
+.rename-dialog-content {
+    background: var(--truex-light);
+    border: 1px solid var(--truex-border);
+    border-radius: 16px;
+    padding: 32px;
+    min-width: 400px;
+    max-width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.rename-dialog-content h3 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    color: var(--truex-text);
+    letter-spacing: -0.5px;
+}
+
+.rename-input {
+    width: 100%;
+    padding: 16px 20px;
+    border: 2px solid var(--truex-border);
+    border-radius: 10px;
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    margin-bottom: 24px;
+    transition: all 0.3s ease;
+    background: var(--truex-light);
+    color: var(--truex-text);
+}
+
+.rename-input:focus {
+    border-color: var(--truex-primary);
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.rename-input::placeholder {
+    color: var(--truex-subtle);
+}
+
+.rename-dialog-buttons {
+    display: flex;
+    gap: 16px;
+    justify-content: flex-end;
+}
+
+.rename-btn {
+    padding: 12px 24px;
+    border: 2px solid var(--truex-border);
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.cancel-btn {
+    background: var(--truex-light);
+    color: var(--truex-subtle);
+    border-color: var(--truex-border);
+}
+
+.cancel-btn:hover {
+    background: var(--truex-hover);
+    color: var(--truex-text);
+    border-color: var(--truex-primary);
+}
+
+.confirm-btn {
+    background: var(--truex-primary);
+    color: #ffffff;
+    border: var(--truex-primary);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+}
+
+.confirm-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(220, 38, 38, 0.35);
+    background: var(--truex-secondary);
+}
+
+.confirm-btn:disabled {
+    background: var(--truex-hover);
+    color: var(--truex-subtle);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* History item hover state with visual feedback */
+.history-item {
+    position: relative;
+}
+
+.history-item::after {
+    content: '⋮';
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.history-item:hover::after {
+    opacity: 1;
+}
+
+/* Animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* Scrollbar styling for TrueX theme */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--truex-surface);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--truex-border);
+    border-radius: 4px;
+    transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--truex-primary);
+}
+
+/* Loading animation with TrueX colors */
+.typing-indicator span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--truex-primary);
+    animation: typing 1.4s infinite ease-in-out;
+}
+
+/* Additional TrueX-specific styling */
+.truex-glow {
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+.truex-border {
+    border: 1px solid rgba(0, 212, 255, 0.3);
+}
+
+/* Smart home tech aesthetic */
+.tech-pattern {
+    background-image:
+        radial-gradient(circle at 20% 50%, rgba(0, 212, 255, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(255, 107, 53, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, rgba(0, 212, 255, 0.05) 0%, transparent 50%);
+}
+
+/* Quick Actions */
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 32px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.quick-action {
+    padding: 16px 20px;
+    background: var(--truex-card);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.quick-action:hover {
+    background: rgba(0, 212, 255, 0.1);
+    border-color: var(--truex-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 212, 255, 0.2);
+}
+
+/* TrueX Smart Home specific responses */
+.truex-device-card {
+    background: var(--truex-card);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 12px 0;
+    backdrop-filter: blur(10px);
+}
+
+.truex-device-title {
+    color: var(--truex-primary);
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.truex-device-status {
+    display: inline-block;
+    padding: 4px 8px;
+    background: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+}
