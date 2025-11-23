@@ -98,7 +98,7 @@ class ChatApp {
         await this.simulateAIResponse(messageText);
     }
 
-    addMessage(text, sender) {
+    addMessage(text, sender, imageBase64 = null) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender}`;
 
@@ -118,6 +118,24 @@ class ChatApp {
         messageTime.textContent = this.getCurrentTime();
 
         content.appendChild(messageText);
+
+        // Add image if present
+        if (imageBase64 && imageBase64.trim() !== '') {
+            const imageContainer = document.createElement('div');
+            imageContainer.className = 'message-image';
+
+            const image = document.createElement('img');
+            image.src = `data:image/png;base64,${imageBase64}`;
+            image.alt = 'Generated image';
+            image.style.maxWidth = '100%';
+            image.style.borderRadius = '8px';
+            image.style.marginTop = '12px';
+            image.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+
+            imageContainer.appendChild(image);
+            content.appendChild(imageContainer);
+        }
+
         content.appendChild(messageTime);
 
         messageDiv.appendChild(avatar);
@@ -131,7 +149,7 @@ class ChatApp {
 
         this.messagesContainer.appendChild(messageDiv);
 
-        const message = { text, sender, time: new Date() };
+        const message = { text, sender, time: new Date(), imageBase64 };
         this.messages.push(message);
 
         // Save to current chat session if we have one
@@ -156,22 +174,84 @@ class ChatApp {
         // Show typing indicator
         this.showTypingIndicator();
 
-        // Simulate API delay
-        await this.delay(1000 + Math.random() * 2000);
+        try {
+            // Make real API call to N8N webhook
+            const response = await this.callN8NWebhook(userMessage);
 
-        // Remove typing indicator
-        this.removeTypingIndicator();
+            // Remove typing indicator
+            this.removeTypingIndicator();
 
-        // Generate response based on user message
-        const response = this.generateResponse(userMessage);
+            // Add AI response from N8N
+            this.addMessage(response.message, 'assistant', response.imageBase64);
+        } catch (error) {
+            // Remove typing indicator
+            this.removeTypingIndicator();
 
-        // Add AI response
-        this.addMessage(response, 'assistant');
+            // Add appropriate error message based on error type
+            let errorMessage = "I'm sorry, I'm having trouble connecting to my AI backend. Please try again in a moment.";
+
+            if (error.message.includes('Failed to fetch')) {
+                errorMessage = "I can't reach my AI backend right now. Please make sure the N8N service is running on localhost:5678 and try again.";
+            } else if (error.message.includes('Request timeout')) {
+                errorMessage = "The request is taking too long. Your query might be complex, so please try again or consider a simpler question.";
+            } else if (error.message.includes('HTTP error! status: 404')) {
+                errorMessage = "The webhook endpoint wasn't found. Please check your N8N workflow configuration.";
+            } else if (error.message.includes('HTTP error! status: 500')) {
+                errorMessage = "There's an issue with the AI processing. Please try again in a moment.";
+            }
+
+            this.addMessage(errorMessage, 'assistant');
+            console.error('N8N API Error:', error);
+        }
 
         // Re-enable input
         this.isTyping = false;
         this.sendButton.disabled = false;
         this.messageInput.focus();
+    }
+
+    async callN8NWebhook(userMessage) {
+        const webhookUrl = 'http://localhost:5678/webhook/user_query';
+
+        // Create a timeout promise (2 minutes for complex N8N workflows)
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Request timeout')), 120000);
+        });
+
+        // Create the fetch promise
+        const fetchPromise = fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_query: userMessage
+            })
+        });
+
+        // Race between fetch and timeout
+        const response = await Promise.race([fetchPromise, timeoutPromise]);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data || !Array.isArray(data) || data.length === 0) {
+            throw new Error('Invalid response format: expected array with response data');
+        }
+
+        const responseData = data[0];
+
+        if (!responseData.message) {
+            throw new Error('Invalid response format: missing message field');
+        }
+
+        return {
+            message: responseData.message,
+            imageBase64: responseData.image_base64 || null
+        };
     }
 
     generateResponse(userMessage) {
@@ -306,7 +386,7 @@ class ChatApp {
 
             // Load all messages from the chat session
             chatSession.messages.forEach(message => {
-                this.displayMessage(message.text, message.sender, message.time, false);
+                this.displayMessage(message.text, message.sender, message.time, false, message.imageBase64);
             });
         } else {
             // If no chat ID or session not found, show welcome message
@@ -317,7 +397,7 @@ class ChatApp {
         this.messageInput.focus();
     }
 
-    displayMessage(text, sender, time, saveToSession = true) {
+    displayMessage(text, sender, time, saveToSession = true, imageBase64 = null) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender}`;
 
@@ -332,22 +412,40 @@ class ChatApp {
         messageText.className = 'message-text';
         messageText.textContent = text;
 
+        content.appendChild(messageText);
+
+        // Add image if present
+        if (imageBase64 && imageBase64.trim() !== '') {
+            const imageContainer = document.createElement('div');
+            imageContainer.className = 'message-image';
+
+            const image = document.createElement('img');
+            image.src = `data:image/png;base64,${imageBase64}`;
+            image.alt = 'Generated image';
+            image.style.maxWidth = '100%';
+            image.style.borderRadius = '8px';
+            image.style.marginTop = '12px';
+            image.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+
+            imageContainer.appendChild(image);
+            content.appendChild(imageContainer);
+        }
+
         const messageTime = document.createElement('div');
         messageTime.className = 'message-time';
         messageTime.textContent = this.formatTime(time);
 
-        content.appendChild(messageText);
         content.appendChild(messageTime);
 
         messageDiv.appendChild(avatar);
         messageDiv.appendChild(content);
 
         this.messagesContainer.appendChild(messageDiv);
-        this.messages.push({ text, sender, time });
+        this.messages.push({ text, sender, time, imageBase64 });
 
         // Save to current chat session if requested and we have one
         if (saveToSession && this.currentChatId && this.chatSessions[this.currentChatId]) {
-            this.chatSessions[this.currentChatId].messages.push({ text, sender, time });
+            this.chatSessions[this.currentChatId].messages.push({ text, sender, time, imageBase64 });
         }
     }
 
