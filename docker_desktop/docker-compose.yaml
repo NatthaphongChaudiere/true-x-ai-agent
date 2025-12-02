@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  n8n:
+    # Instead of pulling an image, we tell Compose to BUILD the Dockerfile in this folder
+    build: .
+    
+    # This matches the -p 5678:5678 flag
+    ports:
+      - "5678:5678"
+    
+    # This matches the -v flag
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+# This section tells Docker: "Don't make a new volume! Look for one that already exists."
+volumes:
+  n8n_data:
+    external: true

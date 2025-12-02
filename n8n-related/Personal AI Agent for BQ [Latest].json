@@ -1,0 +1,747 @@
+{
+  "name": "Personal AI Agent for BQ",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.user_query }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a specialized True X AI assistant. Your **only task** is to be a JSON generator.\n\n### MASTER RULE: JSON OUTPUT MANDATE\n1. You MUST respond with **only** a single, valid, minified JSON object.\n2. You MUST NOT, under any circumstances, provide any text, greetings, apologies, or explanations before or after the JSON object.\n3. Your JSON output MUST strictly follow this exact format, where **all values are strings**:\n\n{\"ai_response\": \"A string response for the user.\", \"is_sql_related\": \"A string, 'True' or 'False'\", \"bigquery_command\": \"A string containing SQL, or an empty string \\\"\\\".\"}\n\nSTEP 1: CATEGORIZE & HANDLE INPUT\nClassify the user's input into one of these three categories and follow the specific rules for each:\n\n1. [GREETING]\nTriggers: Simple hellos (e.g., \"Hi\", \"Good morning\").\nAction: Return a friendly greeting in JSON.\nai_response: \"Hello! I'm the True X helpful assistant, ready to help you with weather data queries!\"\nis_sql_related: \"False\"\nbigquery_command: \"\"\n\n2. [OFF_TOPIC]\nTriggers: General knowledge not related to weather data (e.g., \"Capital of Thailand\", \"Write a poem\").\nAction: Politely decline.\nai_response: \"I'm sorry, as an True X assistant, my purpose is to help with SQL queries for our weather data. I cannot answer general knowledge questions.\"\nis_sql_related: \"False\"\nbigquery_command: \"\"\n\n3. [SQL_REQUEST]\nTriggers: Any request for data, weather, temperature, dates, cities, OR requests to \"Visualize\", \"Plot\", \"Graph\", or \"Chart\" data.\n\nCRITICAL LOGIC:\n1. \"Chart/Graph\" Requests: If a user asks for a visual (e.g., \"Show me a bar chart\"), DO NOT refuse. Treat it as a request for the RAW DATA needed to build that chart.\n2. If City is missing: Assume the user wants to search ALL cities.\n3. If Year is missing: Assume ALL available years.\n4. If \"Minutely\" is mentioned: You MUST use UNNEST(minutely) as m to access 'timestamp_utc', 'precip', or 'temp'.\n\nAction: You MUST generate a valid BigQuery SQL string.\nai_response: \"Certainly! Here is the query to find that information:\"\nis_sql_related: \"True\"\nbigquery_command: (Insert the generated SQL query here)\n\nSTEP 2: DATABASE SCHEMA & SQL RULES\nUse the following table and schema details to construct your queries.\n\nTable Name: `oceanic-maker-477302-q3.non_dataflow_weatherbit_api_data.weatherbit-datacollection-test`\n\nSchema Rules:\n\n1. The MAIN weather data is in a repeated field: `data`.\n   - Access: UNNEST(data) AS d\n   - Contains of:\n   \tcity_name (STRING) - Use for filtering by city.\n\tob_time (TIMESTAMP) - Use this for all Date/Time logic (Month, Year, Day).\n\ttemp (FLOAT) - Temperature.\n\tapp_temp (FLOAT) - Apparent/Feels-like temperature.\n\twind_spd (FLOAT) - Wind speed.\n\trh (FLOAT) - Relative Humidity.\n\tprecip (FLOAT) - Precipitation.\n\tuv (FLOAT) - UV Index.\n\taqi (FLOAT) - Air Quality Index.\n\tsunrise (STRING)\n\tsunset (STRING)\n\tdatetime (STRING) - Alternate date field.\n\tcountry_code (STRING)\n\tweather (STRUCT) -> contains description (STRING), icon (STRING), code (INTEGER).\n\n2. The MINUTELY weather data is a SEPARATE root-level repeated field: `minutely`.\n   - Access: UNNEST(minutely) AS m\n   - Contains of:\n\tprecip (FLOAT)\n\tsnow (FLOAT)\n\ttemp (FLOAT)\n\ttimestamp_utc (TIMESTAMP in UTC)\n\ttimestamp_local (TIMESTAMP in LOCAL)\n   - IMPORTANT: `minutely` is NOT inside `data`. It is a sibling.\n\n3. Joining Logic (The Cross-Join):\n   - If you need to filter by City (which is in `d`) but get Minutely data (which is in `m`), you must UNNEST BOTH.\n   - Correct Syntax: `FROM \\`oceanic-maker-477302-q3.non_dataflow_weatherbit_api_data.weatherbit-datacollection-test\\`, UNNEST(data) AS d, UNNEST(minutely) AS m`\n   - Use `d` for city filtering. Use `m` for high-resolution timestamps/values.\n\nSTEP 3: FEW-SHOT EXAMPLES (STRICTLY FOLLOW THIS PATTERN)\n\nExample 1: Simple Greeting\nUser: \"Hi\"\nResponse: {\"ai_response\": \"Hello! I'm the True X helpful assistant, ready to help you with weather data queries!\", \"is_sql_related\": \"False\", \"bigquery_command\": \"\"}\n\nExample 2: Ambiguous Request (The \"Smart Inference\" Fix)\nUser: \"Help me find the day that have most temperature on November.\"\nAnalysis: User did not specify City or Year. Logic: Query ALL cities, Filter Month=11 (November), Order by Temp DESC, Limit 1.\nResponse: {\"ai_response\": \"Certainly! Here is the query to find that information:\", \"is_sql_related\": \"True\", \"bigquery_command\": \"SELECT d.city_name, d.ob_time, d.temp FROM `oceanic-maker-477302-q3.non_dataflow_weatherbit_api_data.weatherbit-datacollection-test`, UNNEST(data) AS d WHERE EXTRACT(MONTH FROM d.ob_time) = 11 ORDER BY d.temp DESC LIMIT 1\"}\n\nExample 3: Specific Request\nUser: \"Average wind speed in Bangkok.\"\nResponse: {\"ai_response\": \"Certainly! Here is the query to find that information:\", \"is_sql_related\": \"True\", \"bigquery_command\": \"SELECT AVG(d.wind_spd) FROM `oceanic-maker-477302-q3.non_dataflow_weatherbit_api_data.weatherbit-datacollection-test`, UNNEST(data) AS d WHERE d.city_name = 'Bangkok'\"}\n\nExample 4: Visualization Request (Minutely Data)\nUser: \"Show me a bar chart of the precipitation in Phra Pradaeng.\"\nAnalysis: User wants a chart. I cannot make charts, but I CAN provide the SQL to get the raw data. Since \"minutely\" data is requested or implied for high-detail charts, I must unnest 'minutely' separately and join it with 'data' to filter by city.\nResponse: {\"ai_response\": \"Certainly! Here is the query to extract the precipitation data for your chart:\", \"is_sql_related\": \"True\", \"bigquery_command\": \"SELECT m.timestamp_utc, m.precip FROM `oceanic-maker-477302-q3.non_dataflow_weatherbit_api_data.weatherbit-datacollection-test`, UNNEST(data) AS d, UNNEST(minutely) AS m WHERE d.city_name = 'Phra Pradaeng'\"}\n\nExample 5: Off Topic\nUser: \"Who is the prime minister?\"\nResponse: {\"ai_response\": \"I'm sorry, as an True X assistant, my purpose is to help with SQL queries for our weather data. I cannot answer general knowledge questions.\", \"is_sql_related\": \"False\", \"bigquery_command\": \"\"}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -800,
+        256
+      ],
+      "id": "be8219e7-595f-4b43-a32c-efae1ba4f6fa",
+      "name": "Natural Language Processing",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "59d457c2-e66d-482f-8716-78d10269f959",
+              "leftValue": "={{ $json.output.is_sql_related }}",
+              "rightValue": "True",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -464,
+        256
+      ],
+      "id": "7cb89339-7312-4aa6-879c-9df14bd150a9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "glm-4.6",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        -880,
+        464
+      ],
+      "id": "05529bf2-03aa-4832-a81a-4b65f6699daa",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Knge5DuqchVfX0Bn",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user_query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1024,
+        256
+      ],
+      "id": "17841a61-886a-4dd3-89d6-adfd83b7c4cb",
+      "name": "Webhook",
+      "webhookId": "26c75104-8954-41b3-94de-e5652f8a305d"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        160,
+        448
+      ],
+      "id": "77f0cc75-d7d7-4a87-b7e2-d8ed761ff9b5",
+      "name": "Non SQL/Big Query related response"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n    \"ai_response\": \"Hello! I'm ready to help you with your weather data queries. What specific weather information would you like to analyze from the weatherbit-datacollection-test table?\",\n\t\"is_sql_related\": \"True/False\",\n    \"bigquery_command\": \"SELECT * FROM CITY\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -576,
+        464
+      ],
+      "id": "c78aecad-a219-40a0-8a1d-7872aeaf8163",
+      "name": "NLP (1) Output Validator"
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "oceanic-maker-477302-q3",
+          "mode": "list",
+          "cachedResultName": "My First Project",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=oceanic-maker-477302-q3"
+        },
+        "sqlQuery": "{{ $json.output.bigquery_command }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        16
+      ],
+      "id": "efcfb1b5-1b01-4ff8-90e1-46f8bc438bda",
+      "name": "Execute a SQL query",
+      "alwaysOutputData": false,
+      "retryOnFail": false,
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "BE5y00YuZDBqGzVk",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "glm-4.6",
+          "mode": "list",
+          "cachedResultName": "GLM-4.6"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        224
+      ],
+      "id": "fce6721a-bed8-484e-b03f-266a7dffc0b9",
+      "name": "Anthropic Chat Model1",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Knge5DuqchVfX0Bn",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        320,
+        16
+      ],
+      "id": "72baa1de-a0fa-4cbd-a4ef-28a05edb9214",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n    \"type\": \"chart\",\n    \"chart_kind\": \"line\",\n    \"x_col\": \"timestamp\",\n    \"y_col\": \"temp\",\n    \"title\": \"My Title\",\n    \"x_label\": \"Time\",\n    \"y_label\": \"Temperature\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        688,
+        224
+      ],
+      "id": "79c9e579-e607-4586-83ea-5cf7ab40772a",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Question: {{ $('Webhook').item.json.body.user_query }}\nData Sample: {{ JSON.stringify($json.data.slice(0, 5)) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Role: You are a Data Analyst.\nTask: Analyze the User Query and the Data Sample provided.\n\nDecision Logic:\n1. If the user asks for a specific number or fact (e.g., \"What is the max temp?\"), set \"type\" to \"text\". \n2. If the user wants to see trends, comparisons, or a visual, set \"type\" to \"chart\". Fill the chart fields.\n\nOutput: Return ONLY a valid JSON object matching the exact structure below.\n\nJSON Structure Rules:\n- \"type\": Must be \"chart\" or \"text\"\n- \"chart_kind\": Must be \"line\", \"bar\", or \"scatter\" (or \"\" if type is text)\n- \"x_col\": Exact column name from data (or \"\" if type is text)\n- \"y_col\": Exact column name from data (or \"\" if type is text)\n- \"title\": Chart title (or \"\" if type is text)\n- \"x_label\": X axis label (or \"\" if type is text)\n- \"y_label\": Y axis label (or \"\" if type is text)"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        480,
+        16
+      ],
+      "id": "48e491ba-8c49-42cf-aac0-8cc8848359cf",
+      "name": "Decision Maker"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        832,
+        16
+      ],
+      "id": "16177b21-a013-4d94-b10e-2d6f113781fd",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Webhook').item.json.body.user_query }}",
+        "options": {
+          "systemMessage": "You are the \"True X Weather Analyst.\"\n\n### YOUR GOAL\nRead the Tool Output and write a natural response in \"ai_respond\".\n\n### MASTER FORMATTING RULES (CRITICAL)\n1. **NO MARKDOWN:** Do NOT wrap your response in ```json ... ``` code blocks. Return RAW JSON only.\n2. **ALL STRINGS:** All values in your JSON must be strings. Do not use raw booleans.\n\n### CHART LOGIC\n- If user asks for a visualization (Graph, Plot, Chart): Set \"show_chart\" to \"true\" (as a string).\n- Otherwise: Set \"show_chart\" to \"false\" (as a string).\n\n### OUTPUT SCHEMA\n{\n  \"ai_respond\": \"Your helpful text response here.\",\n  \"show_chart\": \"true\" OR \"false\"\n}\n\n\"Output valid JSON only. Do not wrap in markdown.\" (It's okay if it disobeys occasionally now)."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        1040,
+        16
+      ],
+      "id": "e5659f39-8a57-421b-84e6-2819d872e875",
+      "name": "Natural Language Processing1",
+      "alwaysOutputData": false,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "glm-4.6",
+          "mode": "list",
+          "cachedResultName": "GLM-4.6"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        928,
+        224
+      ],
+      "id": "e2028b16-c296-4485-b696-de7ab6d5754c",
+      "name": "Anthropic Chat Model2",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Knge5DuqchVfX0Bn",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "You MUST call this tool for ANY question that asks for data, insights, calculations, or information that could be in a database.\n\nThis tool is used to answer all questions about weather, temp, precip, cities, times, dates, counts, averages, maximums, minimums, etc.\n\nIf the user asks 'what,' 'which,' 'when,' 'where,' 'how many,' 'how much,' 'find,' or 'give me' — you MUST use this tool to find the answer.",
+        "text": "={{ $('Webhook').item.json.body.user_query }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        1216,
+        272
+      ],
+      "id": "ae8e20ba-04e2-481d-a555-8333ebcf89bf",
+      "name": "BigQuery Manager"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-5-20250929",
+          "cachedResultName": "Claude Sonnet 4.5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        1088,
+        480
+      ],
+      "id": "09b8081d-9472-4c8b-9f6b-70a24820e3f7",
+      "name": "Anthropic Chat Model3",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Knge5DuqchVfX0Bn",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "This tool is used to answer all questions about weather, temp, precip, cities, times, dates, counts, averages, maximums, minimums, etc.\n\nIf the user asks 'what,' 'which,' 'when,' 'where,' 'how many,' 'how much,' 'find,' or 'give me' — you MUST use this tool to find the answer.",
+        "projectId": {
+          "__rl": true,
+          "value": "oceanic-maker-477302-q3",
+          "mode": "list",
+          "cachedResultName": "My First Project",
+          "cachedResultUrl": "https://console.cloud.google.com/bigquery?project=oceanic-maker-477302-q3"
+        },
+        "sqlQuery": "{{ $('If').item.json.output.bigquery_command }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleBigQueryTool",
+      "typeVersion": 2.1,
+      "position": [
+        1520,
+        480
+      ],
+      "id": "51b57191-c9b1-403e-bb99-ab06910d2411",
+      "name": "Execute a SQL query in Google BigQuery",
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "BE5y00YuZDBqGzVk",
+          "name": "Google BigQuery account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Decision Maker').item.json.output.type }}",
+                    "rightValue": "text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a21f55e7-b0d6-4c9f-a8f9-368d6d5cb195"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5c053817-1eda-4701-ae05-08b3d8734cb3",
+                    "leftValue": "={{ $('Decision Maker').item.json.output.type }}",
+                    "rightValue": "chart",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        1600,
+        16
+      ],
+      "id": "f7f91e10-93ef-4b48-9348-f983cc4b09e0",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2208,
+        16
+      ],
+      "id": "d43750ec-b107-4d14-a530-5ece85885600",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "return [{\n    \"json\": {\n        \"status\": \"success\",\n        \"message\": _input.first().json.output.ai_respond,\n        \"image_base64\": \"\"\n    },\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        -64
+      ],
+      "id": "e8f21778-a592-45d5-a5c8-9dab7635a110",
+      "name": "None Chart Handling"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import matplotlib\nmatplotlib.use('Agg') \nimport matplotlib.pyplot as plt\nimport pandas as pd\nimport io\nimport base64\n\n# --- HELPER: THE COLUMN HUNTER ---\n# Finds the best matching column even if AI guesses the name slightly wrong\ndef find_best_column(df, target_keyword, exclude=None):\n    if not target_keyword: return None\n    \n    # 1. Exact match in config\n    if target_keyword in df.columns: \n        return target_keyword\n        \n    # 2. Search for keyword in column names (e.g. \"temp\" in \"temperature_c\")\n    for col in df.columns:\n        if col == exclude: continue\n        if str(target_keyword).lower() in col.lower():\n            return col\n            \n    return None\n# ---------------------------------\n\n# 1. GRAB INPUTS\ntry:\n    # We try to grab inputs safely from the Merge or previous node\n    input_json = _('Merge').first().json\n    ai_config = input_json.get('output', {})\n    \n    # If AI returned \"show_chart\": true, we might need to look for \"chart_kind\" elsewhere\n    # or default to line.\n    chart_kind = ai_config.get('chart_kind', 'line')\n    \n    # Get the User Query to help us decide chart type if AI failed\n    user_query = input_json.get('user_query', '').lower()\n    if 'scatter' in user_query: chart_kind = 'scatter'\n    elif 'bar' in user_query: chart_kind = 'bar'\n\n    real_data = input_json.get('data', [])\nexcept:\n    real_data = []\n    chart_kind = 'line'\n\n# 2. PREPARE DATA\ndf = pd.DataFrame(real_data)\n\nif df.empty:\n    # Fail gracefully with a blank image\n    fig = plt.figure()\n    plt.text(0.5, 0.5, 'No Data Available', ha='center')\n    buffer = io.BytesIO()\n    plt.savefig(buffer, format='png')\n    image_data = base64.b64encode(buffer.getvalue()).decode('utf-8')\n    return [{\"json\": {\"image_base64\": image_data}}]\n\n# 3. SMART COLUMN DETECTION\n# A. Find X-Axis (Time)\n# We look for common time names if AI didn't specify one correctly\ntarget_x = ai_config.get('x_col', 'timestamp')\nx_col = find_best_column(df, target_x)\nif not x_col:\n    # Fallback search\n    x_col = find_best_column(df, 'date') or find_best_column(df, 'time')\n\n# B. Find Y-Axis (Data)\n# We look for ALL numeric columns to see if we need Dual Axis\nnumeric_cols = []\nfor col in df.columns:\n    if col == x_col: continue\n    # Check if numeric\n    try:\n        pd.to_numeric(df[col], errors='raise')\n        numeric_cols.append(col)\n    except:\n        pass\n\n# 4. DATA CLEANING\nif x_col:\n    try:\n        df[x_col] = pd.to_datetime(df[x_col])\n        # FIX FOR BAR CHARTS (The Blue Wall Fix)\n        if 'bar' in chart_kind:\n            df[x_col] = df[x_col].dt.strftime('%H:%M:%S')\n    except:\n        pass\n\nfor col in numeric_cols:\n    df[col] = pd.to_numeric(df[col], errors='coerce')\n\n# 5. DRAWING LOGIC\nfig, ax1 = plt.subplots(figsize=(10, 6))\nx_data = df[x_col] if x_col else df.index\n\n# SCENARIO A: DUAL AXIS (Temp vs Precip)\nif len(numeric_cols) >= 2 and 'scatter' not in chart_kind:\n    y1, y2 = numeric_cols[0], numeric_cols[1]\n    \n    # Left Axis\n    color = 'tab:red'\n    ax1.set_xlabel(x_col)\n    ax1.set_ylabel(y1, color=color)\n    ax1.plot(x_data, df[y1], color=color, label=y1)\n    ax1.tick_params(axis='y', labelcolor=color)\n    \n    # Right Axis\n    ax2 = ax1.twinx()\n    color = 'tab:blue'\n    ax2.set_ylabel(y2, color=color)\n    # Use Bar for Precip if it looks like precip, else Line\n    if 'precip' in y2.lower() or 'rain' in y2.lower():\n        ax2.bar(x_data, df[y2], color=color, alpha=0.3, label=y2)\n    else:\n        ax2.plot(x_data, df[y2], color=color, linestyle='--', label=y2)\n    ax2.tick_params(axis='y', labelcolor=color)\n    \n    plt.title(f'{y1} vs {y2}')\n\n# SCENARIO B: SCATTER PLOT (Correlation)\nelif 'scatter' in chart_kind and len(numeric_cols) >= 2:\n    # X = First Metric, Y = Second Metric (Correlation View)\n    ax1.scatter(df[numeric_cols[0]], df[numeric_cols[1]], color='#DB4437', s=100, alpha=0.7)\n    ax1.set_xlabel(numeric_cols[0])\n    ax1.set_ylabel(numeric_cols[1])\n    plt.title(f'Correlation: {numeric_cols[0]} vs {numeric_cols[1]}')\n\n# SCENARIO C: SINGLE AXIS (Standard)\nelif len(numeric_cols) > 0:\n    y1 = numeric_cols[0]\n    if 'bar' in chart_kind:\n        ax1.bar(x_data, df[y1], color='#4285F4')\n    elif 'scatter' in chart_kind:\n        ax1.scatter(x_data, df[y1], color='#DB4437', s=100, alpha=0.7)\n    else:\n        ax1.plot(x_data, df[y1], marker='o', linestyle='-', color='#0F9D58')\n    \n    ax1.set_xlabel(x_col)\n    ax1.set_ylabel(y1)\n    plt.title(ai_config.get('title', f'{y1} Trend'))\n\nelse:\n    plt.text(0.5, 0.5, 'No Numeric Data to Plot', ha='center')\n\nplt.grid(True, alpha=0.3)\nfig.tight_layout()\n\n# 6. SAVE\nbuffer = io.BytesIO()\nplt.savefig(buffer, format='png')\nbuffer.seek(0)\nimage_data = base64.b64encode(buffer.getvalue()).decode('utf-8')\nplt.close()\n\n# 7. RETURN\n# Safely get the text response\nai_msg = _input.first().json.output.ai_respond\n\nreturn [{\n    \"json\": {\n        \"status\": \"success\",\n        \"message\": ai_msg,\n        \"image_base64\": image_data \n    }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        128
+      ],
+      "id": "c7134cc3-f31a-462f-ac69-a06d8cdb72a2",
+      "name": "Chart Handling"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "return [{\n    \"json\": {\n        \"status\": \"success\",\n        \"message\": _('Natural Language Processing').first().json.output.ai_response,\n        \"image_base64\": \"\" \n    },\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        368
+      ],
+      "id": "d0a24d67-9b28-405b-b1a3-7410b02d74cf",
+      "name": "Response Handling"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Get the raw string output from the AI\nconst rawOutput = $input.first().json.output;\n\n// 2. THE CLEANER: Find the JSON object inside the text\n// This regex hunts for the first '{' and the last '}'\nconst jsonMatch = rawOutput.match(/\\{[\\s\\S]*\\}/);\n\nlet cleanData = {};\nlet aiRespond = \"\";\nlet showChart = \"false\";\n\nif (jsonMatch) {\n    try {\n        // Parse the string into a real object\n        cleanData = JSON.parse(jsonMatch[0]);\n        aiRespond = cleanData.ai_respond;\n        showChart = String(cleanData.show_chart).toLowerCase();\n    } catch (e) {\n        // Fallback if parsing fails\n        aiRespond = rawOutput;\n    }\n} else {\n    aiRespond = rawOutput;\n}\n\n// 3. REMOVE THE ASCII CHART (Optional Polish)\n// The AI tried to draw a text chart. We want to strip that out \n// because the Python node generates the real image.\naiRespond = aiRespond.replace(/```[\\s\\S]*?```/g, \"\"); // Removes code blocks\naiRespond = aiRespond.replace(/Precipitation \\(mm\\)[\\s\\S]*?Time \\(UTC\\)/g, \"\"); // Removes loose text charts\n\n// 4. Output Clean Data for Python\nreturn {\n    json: {\n        output: {\n            ai_respond: aiRespond.trim(),\n            show_chart: showChart,\n        }\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        16
+      ],
+      "id": "daafa986-c84e-4be8-b7a0-bd0665115d4c",
+      "name": "Format Cleaner"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Natural Language Processing": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response Handling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Natural Language Processing",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Natural Language Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NLP (1) Output Validator": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Natural Language Processing",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Decision Maker",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Decision Maker",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Decision Maker",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Maker": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Natural Language Processing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Natural Language Processing1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BigQuery Manager": {
+      "ai_tool": [
+        [
+          {
+            "node": "Natural Language Processing1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "BigQuery Manager",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query in Google BigQuery": {
+      "ai_tool": [
+        [
+          {
+            "node": "BigQuery Manager",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Natural Language Processing1": {
+      "main": [
+        [
+          {
+            "node": "Format Cleaner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "None Chart Handling",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chart Handling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "None Chart Handling": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chart Handling": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Handling": {
+      "main": [
+        [
+          {
+            "node": "Non SQL/Big Query related response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Cleaner": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a3c95669-6255-4c41-9103-b5189122b9f0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5b4aa1d9d0def744211f6e8c729bbcf8c2c123e1c0bc6c6aead80c6fb8b28ec1"
+  },
+  "id": "lVWNs5dpPVe0XZsh",
+  "tags": []
+}

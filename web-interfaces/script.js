@@ -244,13 +244,14 @@ class ChatApp {
 
         const responseData = data[0];
 
-        if (!responseData.message) {
-            throw new Error('Invalid response format: missing message field');
+        // Handle the new webhook response format
+        if (!responseData.ai_respond) {
+            throw new Error('Invalid response format: missing ai_respond field');
         }
 
         return {
-            message: responseData.message,
-            imageBase64: responseData.image_base64 || null
+            message: responseData.ai_respond,
+            imageBase64: null // No longer expecting images from webhook
         };
     }
 
