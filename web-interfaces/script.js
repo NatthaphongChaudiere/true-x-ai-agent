@@ -98,7 +98,7 @@ class ChatApp {
         await this.simulateAIResponse(messageText);
     }
 
-    addMessage(text, sender, imageBase64 = null) {
+    addMessage(text, sender, imageBase64 = null, lsLink = null) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender}`;
 
@@ -121,19 +121,62 @@ class ChatApp {
 
         // Add image if present
         if (imageBase64 && imageBase64.trim() !== '') {
-            const imageContainer = document.createElement('div');
-            imageContainer.className = 'message-image';
+            try {
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'message-image';
 
-            const image = document.createElement('img');
-            image.src = `data:image/png;base64,${imageBase64}`;
-            image.alt = 'Generated image';
-            image.style.maxWidth = '100%';
-            image.style.borderRadius = '8px';
-            image.style.marginTop = '12px';
-            image.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                const image = document.createElement('img');
+                image.src = `data:image/png;base64,${imageBase64}`;
+                image.alt = 'Generated image';
+                image.style.maxWidth = '100%';
+                image.style.height = 'auto';
+                image.style.borderRadius = '8px';
 
-            imageContainer.appendChild(image);
-            content.appendChild(imageContainer);
+                // Add error handling for image loading
+                image.onerror = () => {
+                    console.error('Failed to load base64 image');
+                    imageContainer.remove();
+                };
+
+                imageContainer.appendChild(image);
+                content.appendChild(imageContainer);
+            } catch (error) {
+                console.error('Error creating image element:', error);
+            }
+        }
+
+        // Add Looker Studio iframe if ls_link is present
+        if (lsLink && lsLink.trim() !== '') {
+            try {
+                const iframeContainer = document.createElement('div');
+                iframeContainer.className = 'message-iframe';
+
+                const iframe = document.createElement('iframe');
+                iframe.src = lsLink.trim();
+                iframe.width = '600';
+                iframe.height = '450';
+                iframe.frameBorder = '0';
+                iframe.style.border = '0';
+                iframe.allowFullscreen = true;
+                iframe.sandbox = 'allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox';
+
+                // Add error handling for iframe loading
+                iframe.onerror = () => {
+                    console.error('Failed to load Looker Studio iframe');
+                    iframeContainer.remove();
+                };
+
+                // Add a small caption above the iframe
+                const caption = document.createElement('div');
+                caption.className = 'iframe-caption';
+                caption.textContent = '📊 Live Data Dashboard';
+
+                iframeContainer.appendChild(caption);
+                iframeContainer.appendChild(iframe);
+                content.appendChild(iframeContainer);
+            } catch (error) {
+                console.error('Error creating iframe element:', error);
+            }
         }
 
         content.appendChild(messageTime);
@@ -149,7 +192,7 @@ class ChatApp {
 
         this.messagesContainer.appendChild(messageDiv);
 
-        const message = { text, sender, time: new Date(), imageBase64 };
+        const message = { text, sender, time: new Date(), imageBase64, lsLink };
         this.messages.push(message);
 
         // Save to current chat session if we have one
@@ -182,7 +225,7 @@ class ChatApp {
             this.removeTypingIndicator();
 
             // Add AI response from N8N
-            this.addMessage(response.message, 'assistant', response.imageBase64);
+            this.addMessage(response.message, 'assistant', response.imageBase64, response.lsLink);
         } catch (error) {
             // Remove typing indicator
             this.removeTypingIndicator();
@@ -238,20 +281,44 @@ class ChatApp {
 
         const data = await response.json();
 
-        if (!data || !Array.isArray(data) || data.length === 0) {
-            throw new Error('Invalid response format: expected array with response data');
+        // Handle the new webhook response format
+        // Response can be either an array with the data or a direct object
+        let responseData = data;
+        if (Array.isArray(data) && data.length > 0) {
+            responseData = data[0];
         }
 
-        const responseData = data[0];
+        // Validate the new response format
+        if (!responseData || typeof responseData !== 'object') {
+            throw new Error('Invalid response format: expected object with response data');
+        }
 
-        // Handle the new webhook response format
         if (!responseData.ai_respond) {
             throw new Error('Invalid response format: missing ai_respond field');
         }
 
+        // Handle image_base64 - check if it exists and is not empty
+        let imageBase64 = null;
+        if (responseData.image_base64 && typeof responseData.image_base64 === 'string' && responseData.image_base64.trim() !== '') {
+            imageBase64 = responseData.image_base64.trim();
+        }
+
+        // Handle ls_link - extract and validate Looker Studio link
+        let lsLink = null;
+        if (responseData.ls_link && typeof responseData.ls_link === 'string' && responseData.ls_link.trim() !== '') {
+            const link = responseData.ls_link.trim();
+            // Validate if it's a Looker Studio link
+            if (link.includes('lookerstudio.google.com') || link.includes('datastudio.google.com')) {
+                lsLink = link;
+            } else {
+                console.warn('Link provided but not a Looker Studio URL:', link);
+            }
+        }
+
         return {
             message: responseData.ai_respond,
-            imageBase64: null // No longer expecting images from webhook
+            imageBase64: imageBase64,
+            lsLink: lsLink
         };
     }
 
@@ -387,7 +454,7 @@ class ChatApp {
 
             // Load all messages from the chat session
             chatSession.messages.forEach(message => {
-                this.displayMessage(message.text, message.sender, message.time, false, message.imageBase64);
+                this.displayMessage(message.text, message.sender, message.time, false, message.imageBase64, message.lsLink);
             });
         } else {
             // If no chat ID or session not found, show welcome message
@@ -398,7 +465,7 @@ class ChatApp {
         this.messageInput.focus();
     }
 
-    displayMessage(text, sender, time, saveToSession = true, imageBase64 = null) {
+    displayMessage(text, sender, time, saveToSession = true, imageBase64 = null, lsLink = null) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender}`;
 
@@ -417,19 +484,62 @@ class ChatApp {
 
         // Add image if present
         if (imageBase64 && imageBase64.trim() !== '') {
-            const imageContainer = document.createElement('div');
-            imageContainer.className = 'message-image';
+            try {
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'message-image';
 
-            const image = document.createElement('img');
-            image.src = `data:image/png;base64,${imageBase64}`;
-            image.alt = 'Generated image';
-            image.style.maxWidth = '100%';
-            image.style.borderRadius = '8px';
-            image.style.marginTop = '12px';
-            image.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                const image = document.createElement('img');
+                image.src = `data:image/png;base64,${imageBase64}`;
+                image.alt = 'Generated image';
+                image.style.maxWidth = '100%';
+                image.style.height = 'auto';
+                image.style.borderRadius = '8px';
 
-            imageContainer.appendChild(image);
-            content.appendChild(imageContainer);
+                // Add error handling for image loading
+                image.onerror = () => {
+                    console.error('Failed to load base64 image in displayMessage');
+                    imageContainer.remove();
+                };
+
+                imageContainer.appendChild(image);
+                content.appendChild(imageContainer);
+            } catch (error) {
+                console.error('Error creating image element in displayMessage:', error);
+            }
+        }
+
+        // Add Looker Studio iframe if ls_link is present
+        if (lsLink && lsLink.trim() !== '') {
+            try {
+                const iframeContainer = document.createElement('div');
+                iframeContainer.className = 'message-iframe';
+
+                const iframe = document.createElement('iframe');
+                iframe.src = lsLink.trim();
+                iframe.width = '600';
+                iframe.height = '450';
+                iframe.frameBorder = '0';
+                iframe.style.border = '0';
+                iframe.allowFullscreen = true;
+                iframe.sandbox = 'allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox';
+
+                // Add error handling for iframe loading
+                iframe.onerror = () => {
+                    console.error('Failed to load Looker Studio iframe in displayMessage');
+                    iframeContainer.remove();
+                };
+
+                // Add a small caption above the iframe
+                const caption = document.createElement('div');
+                caption.className = 'iframe-caption';
+                caption.textContent = '📊 Live Data Dashboard';
+
+                iframeContainer.appendChild(caption);
+                iframeContainer.appendChild(iframe);
+                content.appendChild(iframeContainer);
+            } catch (error) {
+                console.error('Error creating iframe element in displayMessage:', error);
+            }
         }
 
         const messageTime = document.createElement('div');
@@ -442,11 +552,11 @@ class ChatApp {
         messageDiv.appendChild(content);
 
         this.messagesContainer.appendChild(messageDiv);
-        this.messages.push({ text, sender, time, imageBase64 });
+        this.messages.push({ text, sender, time, imageBase64, lsLink });
 
         // Save to current chat session if requested and we have one
         if (saveToSession && this.currentChatId && this.chatSessions[this.currentChatId]) {
-            this.chatSessions[this.currentChatId].messages.push({ text, sender, time, imageBase64 });
+            this.chatSessions[this.currentChatId].messages.push({ text, sender, time, imageBase64, lsLink });
         }
     }
 

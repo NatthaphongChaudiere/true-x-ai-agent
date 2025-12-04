@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Response Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .response-sample {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            margin: 10px 0;
+        }
+        .result {
+            background: #e8f5e8;
+            padding: 10px;
+            border-radius: 3px;
+            margin: 10px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .image-preview {
+            max-width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .image-preview img {
+            max-width: 100%;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Webhook Response Handler Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Text Only Response</h2>
+        <p>Simulates a webhook response with only text (image_base64 is empty/null)</p>
+        <div class="response-sample" id="textOnlyResponse">
+            <pre>{"ai_respond": "Hello! I can help you analyze your data.", "image_base64": "", "ls_link": ""}</pre>
+        </div>
+        <button onclick="testTextOnlyResponse()">Test Text Response</button>
+        <div class="result" id="textOnlyResult" style="display: none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Text + Image Response</h2>
+        <p>Simulates a webhook response with both text and image</p>
+        <div class="response-sample" id="textImageResponse">
+            <pre>{"ai_respond": "Here's a visualization of your data:", "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", "ls_link": ""}</pre>
+        </div>
+        <button onclick="testTextImageResponse()">Test Text + Image Response</button>
+        <div class="result" id="textImageResult" style="display: none;"></div>
+        <div class="image-preview" id="imagePreview" style="display: none;">
+            <img id="previewImg" alt="Test image">
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Text + Image + Looker Studio</h2>
+        <p>Tests complete response with text, image, and Looker Studio iframe</p>
+        <div class="response-sample" id="fullResponse">
+            <pre>{"ai_respond": "Here's your data analysis with live dashboard:", "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", "ls_link": "https://lookerstudio.google.com/embed/reporting/4eeaad5a-bfa0-48da-8899-e22057385194/page/vgNhF"}</pre>
+        </div>
+        <button onclick="testFullResponse()">Test Full Response</button>
+        <div class="result" id="fullResult" style="display: none;"></div>
+        <div class="image-preview" id="fullImagePreview" style="display: none;">
+            <img id="fullPreviewImg" alt="Test image">
+        </div>
+        <div class="iframe-preview" id="iframePreview" style="display: none;">
+            <h4>Looker Studio Preview:</h4>
+            <iframe src="https://lookerstudio.google.com/embed/reporting/4eeaad5a-bfa0-48da-8899-e22057385194/page/vgNhF" width="600" height="400" frameborder="0" style="border:0" allowfullscreen sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 4: Error Handling</h2>
+        <p>Tests error handling for invalid responses</p>
+        <div class="response-sample" id="errorResponse">
+            <pre>{"invalid": "response"}</pre>
+        </div>
+        <button onclick="testErrorResponse()">Test Error Response</button>
+        <div class="result" id="errorResult" style="display: none;"></div>
+    </div>
+
+    <script>
+        // Mock the webhook response processing logic from our implementation
+        function processWebhookResponse(responseData) {
+            // Validate the response format
+            if (!responseData || typeof responseData !== 'object') {
+                throw new Error('Invalid response format: expected object with response data');
+            }
+
+            if (!responseData.ai_respond) {
+                throw new Error('Invalid response format: missing ai_respond field');
+            }
+
+            // Handle image_base64 - check if it exists and is not empty
+            let imageBase64 = null;
+            if (responseData.image_base64 && typeof responseData.image_base64 === 'string' && responseData.image_base64.trim() !== '') {
+                imageBase64 = responseData.image_base64.trim();
+            }
+
+            // Handle ls_link - extract and validate Looker Studio link
+            let lsLink = null;
+            if (responseData.ls_link && typeof responseData.ls_link === 'string' && responseData.ls_link.trim() !== '') {
+                const link = responseData.ls_link.trim();
+                // Validate if it's a Looker Studio link
+                if (link.includes('lookerstudio.google.com') || link.includes('datastudio.google.com')) {
+                    lsLink = link;
+                } else {
+                    console.warn('Link provided but not a Looker Studio URL:', link);
+                }
+            }
+
+            return {
+                message: responseData.ai_respond,
+                imageBase64: imageBase64,
+                lsLink: lsLink
+            };
+        }
+
+        function testTextOnlyResponse() {
+            try {
+                const response = {"ai_respond": "Hello! I can help you analyze your data.", "image_base64": "", "ls_link": ""};
+                const result = processWebhookResponse(response);
+
+                document.getElementById('textOnlyResult').innerHTML = `
+                    <strong>✅ Success!</strong><br>
+                    Message: "${result.message}"<br>
+                    Image: ${result.imageBase64 ? 'Present' : 'Not present'}
+                `;
+                document.getElementById('textOnlyResult').style.display = 'block';
+            } catch (error) {
+                document.getElementById('textOnlyResult').innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
+                document.getElementById('textOnlyResult').style.display = 'block';
+            }
+        }
+
+        function testTextImageResponse() {
+            try {
+                const response = {"ai_respond": "Here's a visualization of your data:", "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", "ls_link": ""};
+                const result = processWebhookResponse(response);
+
+                document.getElementById('textImageResult').innerHTML = `
+                    <strong>✅ Success!</strong><br>
+                    Message: "${result.message}"<br>
+                    Image: ${result.imageBase64 ? 'Present' : 'Not present'}
+                `;
+                document.getElementById('textImageResult').style.display = 'block';
+
+                if (result.imageBase64) {
+                    document.getElementById('previewImg').src = `data:image/png;base64,${result.imageBase64}`;
+                    document.getElementById('imagePreview').style.display = 'block';
+                }
+            } catch (error) {
+                document.getElementById('textImageResult').innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
+                document.getElementById('textImageResult').style.display = 'block';
+            }
+        }
+
+        function testFullResponse() {
+            try {
+                const response = {"ai_respond": "Here's your data analysis with live dashboard:", "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", "ls_link": "https://lookerstudio.google.com/embed/reporting/4eeaad5a-bfa0-48da-8899-e22057385194/page/vgNhF"};
+                const result = processWebhookResponse(response);
+
+                document.getElementById('fullResult').innerHTML = `
+                    <strong>✅ Success!</strong><br>
+                    Message: "${result.message}"<br>
+                    Image: ${result.imageBase64 ? 'Present' : 'Not present'}<br>
+                    Looker Studio Link: ${result.lsLink ? 'Present and Valid' : 'Not present'}
+                `;
+                document.getElementById('fullResult').style.display = 'block';
+
+                if (result.imageBase64) {
+                    document.getElementById('fullPreviewImg').src = `data:image/png;base64,${result.imageBase64}`;
+                    document.getElementById('fullImagePreview').style.display = 'block';
+                }
+
+                if (result.lsLink) {
+                    document.getElementById('iframePreview').style.display = 'block';
+                }
+            } catch (error) {
+                document.getElementById('fullResult').innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
+                document.getElementById('fullResult').style.display = 'block';
+            }
+        }
+
+        function testErrorResponse() {
+            try {
+                const response = {"invalid": "response"};
+                const result = processWebhookResponse(response);
+
+                document.getElementById('errorResult').innerHTML = `<strong>❌ Should have failed but didn't!</strong>`;
+                document.getElementById('errorResult').style.display = 'block';
+            } catch (error) {
+                document.getElementById('errorResult').innerHTML = `
+                    <strong>✅ Expected Error Caught!</strong><br>
+                    Error: ${error.message}
+                `;
+                document.getElementById('errorResult').style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
